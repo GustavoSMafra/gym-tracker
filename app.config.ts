@@ -39,5 +39,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?? '',
       appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID ?? '',
     },
+    eas: {
+      projectId: '347528de-e901-4e8a-920a-fc16c2c07b70',
+    },
   },
 });

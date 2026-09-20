@@ -15,7 +15,7 @@ import {
 import * as SplashScreen from 'expo-splash-screen';
 import { ToastProvider } from '../lib/ToastContext';
 import { GymDataProvider } from '../lib/GymDataContext';
-import { GoogleAuthProvider } from '../lib/googleAuth';
+import { FirebaseAuthProvider } from '../lib/firebaseAuth';
 import { ToastHost } from '../components/ui/Toast';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { View } from 'react-native';
@@ -44,7 +44,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ErrorBoundary>
         <ToastProvider>
-          <GoogleAuthProvider>
+          <FirebaseAuthProvider>
             <GymDataProvider>
               <View className="flex-1 bg-background">
                 <StatusBar style="light" />
@@ -56,7 +56,7 @@ export default function RootLayout() {
                 <ToastHost />
               </View>
             </GymDataProvider>
-          </GoogleAuthProvider>
+          </FirebaseAuthProvider>
         </ToastProvider>
       </ErrorBoundary>
     </SafeAreaProvider>

@@ -4,17 +4,15 @@ import type { Exercise, GymTrackerData, Workout, WorkoutExercise, WorkoutSession
 import { emptyData, loadLocalData, saveLocalData } from './storage';
 import { seedExercises } from './seedExercises';
 import { generateId } from './id';
-import { useGoogleAuth } from './googleAuth';
-import { downloadRemoteData, mergeByRecency, uploadRemoteData } from './driveSync';
+import { useFirebaseAuth } from './firebaseAuth';
+import { downloadRemoteData, mergeByRecency, uploadRemoteData } from './firestoreSync';
 import { useToast } from './ToastContext';
 
 interface GymDataContextValue {
   data: GymTrackerData;
   loading: boolean;
   isSignedIn: boolean;
-  isGoogleConfigured: boolean;
-  signIn: () => void;
-  signOut: () => void;
+  isFirebaseConfigured: boolean;
   setWeeklyGoal: (goal: number) => void;
   addCustomExercise: (name: string, muscleGroup: string) => Exercise;
   createWorkout: (name: string, description: string | undefined, exercises: WorkoutExercise[]) => Workout;
@@ -31,7 +29,7 @@ export function GymDataProvider({ children }: { children: React.ReactNode }) {
   const dataRef = useRef(data);
   dataRef.current = data;
   const { showToast } = useToast();
-  const auth = useGoogleAuth();
+  const auth = useFirebaseAuth();
   const syncingRef = useRef(false);
 
   useEffect(() => {
@@ -40,11 +38,16 @@ export function GymDataProvider({ children }: { children: React.ReactNode }) {
       if (existing) {
         setData(existing);
       } else {
-        const now = new Date().toISOString();
+        // updatedAt intentionally stays at emptyData()'s epoch value (not
+        // "now") — this placeholder must always lose the last-write-wins
+        // merge in reconcile() to any real remote data. Stamping it "now"
+        // caused a real data-loss bug: after any local-storage wipe (app
+        // reinstall, new device, cleared site data), this freshly-reseeded
+        // empty document was "newer" than the genuine remote save and
+        // silently overwrote it on the very next reconcile.
         const seeded: GymTrackerData = {
           ...emptyData(),
-          exercises: seedExercises(generateId, now),
-          updatedAt: now,
+          exercises: seedExercises(generateId, new Date().toISOString()),
         };
         setData(seeded);
         await saveLocalData(seeded);
@@ -54,16 +57,16 @@ export function GymDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   async function reconcile() {
-    if (!auth.accessToken || syncingRef.current) return;
+    if (!auth.uid || syncingRef.current) return;
     syncingRef.current = true;
     try {
-      const remote = await downloadRemoteData(auth.accessToken);
+      const remote = await downloadRemoteData(auth.uid);
       const merged = remote ? mergeByRecency(dataRef.current, remote) : dataRef.current;
       if (merged !== dataRef.current) {
         setData(merged);
         await saveLocalData(merged);
       }
-      await uploadRemoteData(auth.accessToken, merged);
+      await uploadRemoteData(auth.uid, merged);
     } catch {
       showToast('Sync failed — working offline, will retry', 'info');
     } finally {
@@ -82,14 +85,14 @@ export function GymDataProvider({ children }: { children: React.ReactNode }) {
     });
     return () => subscription.remove();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auth.accessToken]);
+  }, [auth.uid]);
 
   function mutate(updater: (current: GymTrackerData) => GymTrackerData) {
     const next = { ...updater(dataRef.current), updatedAt: new Date().toISOString() };
     setData(next);
     saveLocalData(next).catch(() => showToast('Could not save locally', 'error'));
-    if (auth.accessToken) {
-      uploadRemoteData(auth.accessToken, next).catch(() => showToast('Sync failed — working offline, will retry', 'info'));
+    if (auth.uid) {
+      uploadRemoteData(auth.uid, next).catch(() => showToast('Sync failed — working offline, will retry', 'info'));
     }
     return next;
   }
@@ -151,9 +154,7 @@ export function GymDataProvider({ children }: { children: React.ReactNode }) {
         data,
         loading,
         isSignedIn: auth.isSignedIn,
-        isGoogleConfigured: auth.isConfigured,
-        signIn: () => auth.signIn(),
-        signOut: () => auth.signOut(),
+        isFirebaseConfigured: auth.isConfigured,
         setWeeklyGoal,
         addCustomExercise,
         createWorkout,
